@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kalamar-persistence
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: kalamar-persistence
+  ports:
+    - port: {{ .Values.ports.persistence }}
+      targetPort: {{ .Values.ports.persistence }}
+  type: ClusterIP

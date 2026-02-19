@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalamar-task
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kalamar-task
+  template:
+    metadata:
+      labels:
+        app: kalamar-task
+    spec:
+      containers:
+        - name: task-service
+          image: {{ .Values.images.task }}
+          ports:
+            - containerPort: {{ .Values.ports.task }}
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8083"
+            - name: PersistenceService__BaseUrl
+              value: "http://kalamar-persistence:8082/"

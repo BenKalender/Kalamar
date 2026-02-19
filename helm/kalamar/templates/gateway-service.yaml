@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kalamar-gateway
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: kalamar-gateway
+  ports:
+    - port: {{ .Values.ports.gateway }}
+      targetPort: {{ .Values.ports.gateway }}
+  type: ClusterIP

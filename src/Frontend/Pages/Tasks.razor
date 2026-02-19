@@ -1,0 +1,141 @@
+@page "/tasks"
+@inject HttpClient Http
+
+<PageTitle>Tasks</PageTitle>
+
+<h1>Tasks</h1>
+
+<EditForm Model="newTask" OnValidSubmit="CreateTaskAsync">
+    <div class="row g-2 mb-2">
+        <div class="col-md-4">
+            <InputText class="form-control" @bind-Value="newTask.Title" placeholder="Title" />
+        </div>
+        <div class="col-md-4">
+            <InputText class="form-control" @bind-Value="newTask.Description" placeholder="Description" />
+        </div>
+        <div class="col-md-2">
+            <InputNumber class="form-control" @bind-Value="newTask.UserId" placeholder="User Id" />
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary w-100">Add Task</button>
+        </div>
+    </div>
+</EditForm>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (tasks.Count == 0)
+{
+    <p><em>No tasks found.</em></p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>UserId</th>
+                <th>Done</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var taskItem in tasks)
+            {
+                <tr>
+                    <td>@taskItem.Id</td>
+                    <td>@taskItem.Title</td>
+                    <td>@taskItem.Description</td>
+                    <td>@taskItem.UserId</td>
+                    <td>
+                        <input type="checkbox" checked="@taskItem.IsCompleted" @onchange="args => ToggleCompletedAsync(taskItem, (bool?)args.Value ?? false)" />
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTaskAsync(taskItem.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private readonly List<TaskItem> tasks = [];
+    private TaskItem newTask = new();
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasksAsync();
+    }
+
+    private async Task LoadTasksAsync()
+    {
+        errorMessage = null;
+
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<TaskItem>>("api/task");
+            tasks.Clear();
+            tasks.AddRange(data ?? []);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load tasks: {ex.Message}";
+        }
+    }
+
+    private async Task CreateTaskAsync()
+    {
+        errorMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/task", newTask);
+            response.EnsureSuccessStatusCode();
+            newTask = new TaskItem();
+            await LoadTasksAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to create task: {ex.Message}";
+        }
+    }
+
+    private async Task ToggleCompletedAsync(TaskItem taskItem, bool isCompleted)
+    {
+        errorMessage = null;
+
+        try
+        {
+            taskItem.IsCompleted = isCompleted;
+            var response = await Http.PutAsJsonAsync($"api/task/{taskItem.Id}", taskItem);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to update task: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteTaskAsync(int id)
+    {
+        errorMessage = null;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/task/{id}");
+            response.EnsureSuccessStatusCode();
+            await LoadTasksAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete task: {ex.Message}";
+        }
+    }
+}

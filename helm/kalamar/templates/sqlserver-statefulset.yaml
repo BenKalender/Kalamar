@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kalamar-sqlserver
+  namespace: {{ .Values.namespace }}
+spec:
+  serviceName: kalamar-sqlserver
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kalamar-sqlserver
+  template:
+    metadata:
+      labels:
+        app: kalamar-sqlserver
+    spec:
+      containers:
+        - name: sqlserver
+          image: {{ .Values.images.sqlserver }}
+          ports:
+            - containerPort: {{ .Values.ports.sqlserver }}
+          env:
+            - name: ACCEPT_EULA
+              value: "Y"
+            - name: SA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kalamar-sqlserver-secret
+                  key: SA_PASSWORD
+          volumeMounts:
+            - name: sqlserver-data
+              mountPath: /var/opt/mssql
+  volumeClaimTemplates:
+    - metadata:
+        name: sqlserver-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.sqlserver.storage.size }}

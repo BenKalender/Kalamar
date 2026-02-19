@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalamar-frontend
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kalamar-frontend
+  template:
+    metadata:
+      labels:
+        app: kalamar-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: {{ .Values.images.frontend }}
+          ports:
+            - containerPort: {{ .Values.ports.frontend }}
+          volumeMounts:
+            - name: frontend-config
+              mountPath: /usr/share/nginx/html/appsettings.json
+              subPath: appsettings.json
+      volumes:
+        - name: frontend-config
+          configMap:
+            name: kalamar-frontend-config

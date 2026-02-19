@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalamar-gateway
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kalamar-gateway
+  template:
+    metadata:
+      labels:
+        app: kalamar-gateway
+    spec:
+      containers:
+        - name: gateway-service
+          image: {{ .Values.images.gateway }}
+          ports:
+            - containerPort: {{ .Values.ports.gateway }}
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+          volumeMounts:
+            - name: gateway-config
+              mountPath: /app/appsettings.json
+              subPath: appsettings.json
+      volumes:
+        - name: gateway-config
+          configMap:
+            name: kalamar-gateway-config

@@ -1,0 +1,31 @@
+# Visual Studio Code
+.vscode/
+
+# Binaries
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.exe
+*.dll
+*.pdb
+
+# Build files
+*.suo
+*.user
+*.aps
+*.vspscc
+*.vssscc
+
+# NuGet packages
+packages/
+*.nupkg
+
+# Default build artifacts
+[Bb]in/
+[Oo]bj/
+
+# Environment/overrides
+.env
+docker-compose.override.yml
+values.local.yaml

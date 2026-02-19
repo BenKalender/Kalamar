@@ -1,0 +1,117 @@
+@page "/users"
+@inject HttpClient Http
+
+<PageTitle>Users</PageTitle>
+
+<h1>Users</h1>
+
+<EditForm Model="newUser" OnValidSubmit="CreateUserAsync">
+    <div class="row g-2 mb-3">
+        <div class="col-md-4">
+            <InputText class="form-control" @bind-Value="newUser.Username" placeholder="Username" />
+        </div>
+        <div class="col-md-5">
+            <InputText class="form-control" @bind-Value="newUser.Email" placeholder="Email" />
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary w-100">Add User</button>
+        </div>
+    </div>
+</EditForm>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (users.Count == 0)
+{
+    <p><em>No users found.</em></p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in users)
+            {
+                <tr>
+                    <td>@user.Id</td>
+                    <td>@user.Username</td>
+                    <td>@user.Email</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteUserAsync(user.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private readonly List<User> users = [];
+    private User newUser = new();
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        errorMessage = null;
+
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<User>>("api/user");
+            users.Clear();
+            users.AddRange(data ?? []);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load users: {ex.Message}";
+        }
+    }
+
+    private async Task CreateUserAsync()
+    {
+        errorMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/user", newUser);
+            response.EnsureSuccessStatusCode();
+
+            newUser = new User();
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to create user: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteUserAsync(int id)
+    {
+        errorMessage = null;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/user/{id}");
+            response.EnsureSuccessStatusCode();
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete user: {ex.Message}";
+        }
+    }
+}

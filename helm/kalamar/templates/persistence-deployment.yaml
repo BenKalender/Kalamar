@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalamar-persistence
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kalamar-persistence
+  template:
+    metadata:
+      labels:
+        app: kalamar-persistence
+    spec:
+      containers:
+        - name: persistence-service
+          image: {{ .Values.images.persistence }}
+          ports:
+            - containerPort: {{ .Values.ports.persistence }}
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8082"
+            - name: ConnectionStrings__DefaultConnection
+              value: "Server=kalamar-sqlserver,1433;Database=KalamarDb;User Id=sa;Password={{ .Values.sqlserver.saPassword }};TrustServerCertificate=True;"

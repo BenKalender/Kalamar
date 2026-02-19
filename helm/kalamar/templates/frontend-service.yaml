@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kalamar-frontend
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: kalamar-frontend
+  ports:
+    - port: 80
+      targetPort: {{ .Values.ports.frontend }}
+  type: ClusterIP

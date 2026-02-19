@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalamar-user
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kalamar-user
+  template:
+    metadata:
+      labels:
+        app: kalamar-user
+    spec:
+      containers:
+        - name: user-service
+          image: {{ .Values.images.user }}
+          ports:
+            - containerPort: {{ .Values.ports.user }}
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8081"
+            - name: PersistenceService__BaseUrl
+              value: "http://kalamar-persistence:8082/"

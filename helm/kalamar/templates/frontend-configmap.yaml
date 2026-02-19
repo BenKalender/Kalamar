@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kalamar-frontend-config
+  namespace: {{ .Values.namespace }}
+data:
+  appsettings.json: |
+    {
+      "ApiGatewayBaseUrl": "http://kalamar-gateway:8080/"
+    }

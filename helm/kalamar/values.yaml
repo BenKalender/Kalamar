@@ -1,0 +1,22 @@
+namespace: kalamar-dev
+
+images:
+  frontend: kalamar/frontend:dev
+  gateway: kalamar/gateway-service:dev
+  user: kalamar/user-service:dev
+  task: kalamar/task-service:dev
+  persistence: kalamar/persistence-service:dev
+  sqlserver: mcr.microsoft.com/mssql/server:2022-latest
+
+ports:
+  frontend: 80
+  gateway: 8080
+  user: 8081
+  persistence: 8082
+  task: 8083
+  sqlserver: 1433
+
+sqlserver:
+  saPassword: "ChangeMe"
+  storage:
+    size: 5Gi
