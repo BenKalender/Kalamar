@@ -29,3 +29,4 @@ packages/
 .env
 docker-compose.override.yml
 values.local.yaml
+test.rest

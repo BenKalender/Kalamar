@@ -4,7 +4,7 @@ using UserService.Models;
 
 namespace UserService.Controllers;
 
-[Route("api/[controller]")]
+[Route("api/users")]
 [ApiController]
 public class UserController(IPersistenceUserClient persistenceUserClient) : ControllerBase
 {

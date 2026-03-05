@@ -4,7 +4,7 @@ using TaskService.Models;
 
 namespace TaskService.Controllers;
 
-[Route("api/[controller]")]
+[Route("api/tasks")]
 [ApiController]
 public class TaskController(IPersistenceTaskClient persistenceTaskClient) : ControllerBase
 {

@@ -26,7 +26,9 @@
 
 @if (users.Count == 0)
 {
-    <p><em>No users found.</em></p>
+    <div class="alert alert-info" role="alert">
+        <strong>No users yet.</strong> Create your first user using the form above.
+    </div>
 }
 else
 {
@@ -71,7 +73,7 @@ else
 
         try
         {
-            var data = await Http.GetFromJsonAsync<List<User>>("api/user");
+            var data = await Http.GetFromJsonAsync<List<User>>("api/users");
             users.Clear();
             users.AddRange(data ?? []);
         }
@@ -87,7 +89,7 @@ else
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/user", newUser);
+            var response = await Http.PostAsJsonAsync("api/users", newUser);
             response.EnsureSuccessStatusCode();
 
             newUser = new User();
@@ -105,7 +107,7 @@ else
 
         try
         {
-            var response = await Http.DeleteAsync($"api/user/{id}");
+            var response = await Http.DeleteAsync($"api/users/{id}");
             response.EnsureSuccessStatusCode();
             await LoadUsersAsync();
         }

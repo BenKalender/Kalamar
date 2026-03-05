@@ -29,7 +29,9 @@
 
 @if (tasks.Count == 0)
 {
-    <p><em>No tasks found.</em></p>
+    <div class="alert alert-info" role="alert">
+        <strong>No tasks yet.</strong> Create your first task using the form above.
+    </div>
 }
 else
 {
@@ -80,7 +82,7 @@ else
 
         try
         {
-            var data = await Http.GetFromJsonAsync<List<TaskItem>>("api/task");
+            var data = await Http.GetFromJsonAsync<List<TaskItem>>("api/tasks");
             tasks.Clear();
             tasks.AddRange(data ?? []);
         }
@@ -96,7 +98,7 @@ else
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/task", newTask);
+            var response = await Http.PostAsJsonAsync("api/tasks", newTask);
             response.EnsureSuccessStatusCode();
             newTask = new TaskItem();
             await LoadTasksAsync();
@@ -114,7 +116,7 @@ else
         try
         {
             taskItem.IsCompleted = isCompleted;
-            var response = await Http.PutAsJsonAsync($"api/task/{taskItem.Id}", taskItem);
+            var response = await Http.PutAsJsonAsync($"api/tasks/{taskItem.Id}", taskItem);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -129,7 +131,7 @@ else
 
         try
         {
-            var response = await Http.DeleteAsync($"api/task/{id}");
+            var response = await Http.DeleteAsync($"api/tasks/{id}");
             response.EnsureSuccessStatusCode();
             await LoadTasksAsync();
         }
