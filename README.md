@@ -1,6 +1,6 @@
 # Kalamar - Microservice Architecture Example
 
-This project demonstrates a microservice architecture using C#, Docker, Kubernetes (micro8s), Helm charts, and Argo CD for GitOps deployment.
+This project demonstrates a microservice architecture using C#, Docker, Kubernetes, Helm charts, and Argo CD for GitOps deployment.
 
 ## Architecture Overview
 
@@ -12,10 +12,10 @@ The Kalamar system consists of the following microservices:
 5. **Persistence Service** - Handles database operations
 
 ## Technology Stack
-- C# .NET 8
-- Entity Framework Core with PostgreSQL
-- Docker
-- Kubernetes (micro8s)
+- ✅ C# .NET 8 
+- ✅ Entity Framework Core with PostgreSQL
+- ✅ Docker
+- ✅ Kubernetes (docker compose)
 - Helm charts
 - Argo CD for GitOps
 
