@@ -1,0 +1,17 @@
+Kalamar {{ .Chart.AppVersion }} "{{ .Release.Namespace }}" namespace'ine kuruldu (release: {{ .Release.Name }}).
+
+Pod'ları izlemek için:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -w
+
+{{- if .Values.ingress.enabled }}
+
+Uygulama (k3d'de load balancer 8000 portuna map'liyse):
+  http://{{ .Values.ingress.host }}:8000
+{{- else }}
+
+Ingress kapalı. Frontend'e port-forward ile erişin:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "kalamar.componentName" (dict "root" . "component" "frontend") }} 8084:80
+  http://localhost:8084
+{{- end }}
+
+SQL Server ilk açılışta 1-2 dakika sürebilir; Persistence servisi Ready olduğunda tablolar migration ile oluşmuş olur.

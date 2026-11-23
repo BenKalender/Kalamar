@@ -1,0 +1,103 @@
+{{- /*
+Uygulama servisleri (persistence, user, task, gateway, frontend): values.yaml'daki `apps` altındaki
+her girdi için bir Deployment ve bir Service üretilir.
+*/}}
+{{- range $component, $app := .Values.apps }}
+{{- if $app.enabled }}
+{{- $name := include "kalamar.componentName" (dict "root" $ "component" $component) }}
+{{- $ctx := dict "root" $ "component" $component }}
+{{- $env := deepCopy ($app.env | default dict) }}
+{{- if not $app.skipCommonEnv }}
+{{- $env = merge $env (deepCopy ($.Values.commonEnv | default dict)) }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kalamar.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ $app.replicas | default 1 }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "kalamar.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kalamar.labels" $ctx | nindent 8 }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $app.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $component }}
+          image: {{ include "kalamar.image" (dict "root" $ "component" $component "app" $app) | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $app.port }}
+              protocol: TCP
+          {{- if or $env $app.sqlPassword }}
+          env:
+            {{- if $app.sqlPassword }}
+            {{- /* $(MSSQL_SA_PASSWORD) genişletmesi için diğer env'lerden önce tanımlanmalı. */}}
+            {{- include "kalamar.sqlserver.passwordEnv" $ | nindent 12 }}
+            {{- end }}
+            {{- range $key, $value := $env }}
+            - name: {{ $key }}
+              value: {{ tpl (toString $value) $ | quote }}
+            {{- end }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: {{ $app.probes.liveness }}
+              port: http
+            periodSeconds: 5
+            failureThreshold: {{ $app.startupFailureThreshold | default 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ $app.probes.liveness }}
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ $app.probes.readiness }}
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          {{- with $.Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $app.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kalamar.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "kalamar.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $app.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- end }}
