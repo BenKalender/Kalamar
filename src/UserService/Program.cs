@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Http.Resilience;
 using UserService.Interfaces;
 using UserService.Services;
 
@@ -7,18 +8,10 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 
-builder.Services.AddHttpClient<IPersistenceUserClient, PersistenceUserClient>((serviceProvider, client) =>
-{
-    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    var baseUrl = configuration["PersistenceService:BaseUrl"];
-
-    if (string.IsNullOrWhiteSpace(baseUrl))
-    {
-        throw new InvalidOperationException("PersistenceService:BaseUrl is missing in configuration.");
-    }
-
-    client.BaseAddress = new Uri(baseUrl);
-});
+builder.Services
+    .AddHttpClient<IPersistenceUserClient, PersistenceUserClient>((sp, client) =>
+        client.BaseAddress = GetRequiredUri(sp, "PersistenceService:BaseUrl"))
+    .AddStandardResilienceHandler(ConfigureResilience);
 
 var app = builder.Build();
 
@@ -32,3 +25,15 @@ app.MapHealthChecks("/healthz/live");
 app.MapHealthChecks("/healthz/ready");
 
 await app.RunAsync();
+
+static Uri GetRequiredUri(IServiceProvider serviceProvider, string key)
+{
+    var value = serviceProvider.GetRequiredService<IConfiguration>()[key];
+    return string.IsNullOrWhiteSpace(value)
+        ? throw new InvalidOperationException($"{key} is missing in configuration.")
+        : new Uri(value);
+}
+
+// Retry, timeout ve circuit breaker. POST/PUT/DELETE tekrar denenmez (mükerrer kayıt riskine karşı).
+static void ConfigureResilience(HttpStandardResilienceOptions options) =>
+    options.Retry.DisableForUnsafeHttpMethods();

@@ -10,11 +10,17 @@
         <div class="col-md-4">
             <InputText class="form-control" @bind-Value="newTask.Title" placeholder="Title" />
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <InputText class="form-control" @bind-Value="newTask.Description" placeholder="Description" />
         </div>
-        <div class="col-md-2">
-            <InputNumber class="form-control" @bind-Value="newTask.UserId" placeholder="User Id" />
+        <div class="col-md-3">
+            <InputSelect class="form-select" @bind-Value="newTask.UserId">
+                <option value="0">-- Assign to user --</option>
+                @foreach (var user in users)
+                {
+                    <option value="@user.Id">@user.Username (#@user.Id)</option>
+                }
+            </InputSelect>
         </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-primary w-100">Add Task</button>
@@ -22,9 +28,16 @@
     </div>
 </EditForm>
 
+@if (users.Count == 0 && errorMessage is null)
+{
+    <div class="alert alert-warning">
+        There are no users yet. <a href="/users">Create a user</a> first, then assign tasks to them.
+    </div>
+}
+
 @if (!string.IsNullOrWhiteSpace(errorMessage))
 {
-    <div class="alert alert-danger">@errorMessage</div>
+    <div class="alert @(isWarning ? "alert-warning" : "alert-danger")">@errorMessage</div>
 }
 
 @if (tasks.Count == 0)
@@ -41,7 +54,7 @@ else
                 <th>Id</th>
                 <th>Title</th>
                 <th>Description</th>
-                <th>UserId</th>
+                <th>User</th>
                 <th>Done</th>
                 <th></th>
             </tr>
@@ -53,7 +66,7 @@ else
                     <td>@taskItem.Id</td>
                     <td>@taskItem.Title</td>
                     <td>@taskItem.Description</td>
-                    <td>@taskItem.UserId</td>
+                    <td>@UserLabel(taskItem.UserId)</td>
                     <td>
                         <input type="checkbox" checked="@taskItem.IsCompleted" @onchange="args => ToggleCompletedAsync(taskItem, (bool?)args.Value ?? false)" />
                     </td>
@@ -68,18 +81,35 @@ else
 
 @code {
     private readonly List<TaskItem> tasks = [];
+    private readonly List<User> users = [];
     private TaskItem newTask = new();
     private string? errorMessage;
+    private bool isWarning;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadTasksAsync();
+        await Task.WhenAll(LoadUsersAsync(), LoadTasksAsync());
+    }
+
+    private string UserLabel(int userId) =>
+        users.FirstOrDefault(u => u.Id == userId) is { } user ? user.Username : $"#{userId} (deleted)";
+
+    private async Task LoadUsersAsync()
+    {
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<User>>("api/users");
+            users.Clear();
+            users.AddRange(data ?? []);
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Failed to load users: {ex.Message}");
+        }
     }
 
     private async Task LoadTasksAsync()
     {
-        errorMessage = null;
-
         try
         {
             var data = await Http.GetFromJsonAsync<List<TaskItem>>("api/tasks");
@@ -88,7 +118,7 @@ else
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to load tasks: {ex.Message}";
+            ShowError($"Failed to load tasks: {ex.Message}");
         }
     }
 
@@ -99,13 +129,15 @@ else
         try
         {
             var response = await Http.PostAsJsonAsync("api/tasks", newTask);
-            response.EnsureSuccessStatusCode();
-            newTask = new TaskItem();
-            await LoadTasksAsync();
+            if (!await HandleFailureAsync(response, "Task could not be created"))
+            {
+                newTask = new TaskItem();
+                await LoadTasksAsync();
+            }
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to create task: {ex.Message}";
+            ShowError($"Failed to create task: {ex.Message}");
         }
     }
 
@@ -117,11 +149,15 @@ else
         {
             taskItem.IsCompleted = isCompleted;
             var response = await Http.PutAsJsonAsync($"api/tasks/{taskItem.Id}", taskItem);
-            response.EnsureSuccessStatusCode();
+            if (await HandleFailureAsync(response, "Task could not be updated"))
+            {
+                taskItem.IsCompleted = !isCompleted;
+            }
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to update task: {ex.Message}";
+            taskItem.IsCompleted = !isCompleted;
+            ShowError($"Failed to update task: {ex.Message}");
         }
     }
 
@@ -132,12 +168,33 @@ else
         try
         {
             var response = await Http.DeleteAsync($"api/tasks/{id}");
-            response.EnsureSuccessStatusCode();
-            await LoadTasksAsync();
+            if (!await HandleFailureAsync(response, "Task could not be deleted"))
+            {
+                await LoadTasksAsync();
+            }
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to delete task: {ex.Message}";
+            ShowError($"Failed to delete task: {ex.Message}");
         }
+    }
+
+    /// <summary>Cevap başarısızsa hata mesajını gösterir ve <c>true</c> döner.</summary>
+    private async Task<bool> HandleFailureAsync(HttpResponseMessage response, string action)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return false;
+        }
+
+        var message = await ApiProblem.ReadMessageAsync(response);
+        ShowError($"{action}: {message}", warning: ApiProblem.IsServiceUnavailable(response));
+        return true;
+    }
+
+    private void ShowError(string message, bool warning = false)
+    {
+        errorMessage = message;
+        isWarning = warning;
     }
 }
