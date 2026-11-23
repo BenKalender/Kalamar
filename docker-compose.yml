@@ -57,10 +57,12 @@ services:
     container_name: kalamar-task
     environment:
       PersistenceService__BaseUrl: "http://persistence-service:8080/"
+      UserService__BaseUrl: "http://user-service:8080/"
     ports:
       - "8083:8080"
     depends_on:
       - persistence-service
+      - user-service
 
   gateway-service:
     build:
