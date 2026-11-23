@@ -1,22 +1,155 @@
-namespace: kalamar-dev
+# Kalamar Helm chart varsayılanları.
+# Ortama özel değerler values-<ortam>.yaml dosyalarında ezilir (bkz. values-dev.yaml).
+# Namespace burada yok: `helm install -n <ns> --create-namespace` veya Argo CD (CreateNamespace=true) belirler.
 
-images:
-  frontend: kalamar/frontend:dev
-  gateway: kalamar/gateway-service:dev
-  user: kalamar/user-service:dev
-  task: kalamar/task-service:dev
-  persistence: kalamar/persistence-service:dev
-  sqlserver: mcr.microsoft.com/mssql/server:2022-latest
+nameOverride: ""
+fullnameOverride: ""
 
-ports:
-  frontend: 80
-  gateway: 8080
-  user: 8081
-  persistence: 8082
-  task: 8083
-  sqlserver: 1433
+# Uygulama image'ları <registry>/<repositoryPrefix><uygulama>:<tag> biçimindedir,
+# örn. ghcr.io/benkalender/kalamar-user:1a2b3c4. tag boşsa Chart.yaml'daki appVersion kullanılır.
+image:
+  registry: ghcr.io/benkalender
+  repositoryPrefix: kalamar-
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# .NET servislerinin hepsine eklenen env (uygulamanın kendi env'i aynı anahtarı ezer).
+commonEnv:
+  ASPNETCORE_ENVIRONMENT: Production
+
+# Uygulama servisleri. Hepsi tek bir Deployment + Service şablonundan (templates/apps.yaml) üretilir.
+#   port                    : container ve Service portu (.NET servisleri 8080, nginx 80)
+#   probes                  : liveness/readiness HTTP yolları; startup probe liveness yolunu kullanır
+#   startupFailureThreshold : açılış için tanınan deneme sayısı (x 5 sn)
+#   sqlPassword             : true ise MSSQL_SA_PASSWORD, SQL Server Secret'ından env olarak eklenir;
+#                             env içindeki $(MSSQL_SA_PASSWORD) ifadesini Kubernetes genişletir
+#   env                     : değerler `tpl` ile işlenir, {{ include "kalamar.fullname" . }} kullanılabilir
+#   image.repository / image.tag : bu uygulama için global image ayarlarını ezer
+apps:
+  persistence:
+    enabled: true
+    replicas: 1
+    port: 8080
+    probes:
+      liveness: /healthz/live
+      readiness: /healthz/ready
+    # Açılışta SQL Server beklenir ve migration çalışır; bu yüzden açılış süresi uzun (30 x 5 sn).
+    startupFailureThreshold: 30
+    sqlPassword: true
+    env:
+      Database__MigrateOnStartup: "true"
+      ConnectionStrings__DefaultConnection: >-
+        Server={{ include "kalamar.fullname" . }}-sqlserver,1433;Database=KalamarDb;User Id=sa;Password=$(MSSQL_SA_PASSWORD);TrustServerCertificate=True;
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+    podSecurityContext:
+      runAsNonRoot: true
+
+  user:
+    enabled: true
+    replicas: 1
+    port: 8080
+    probes:
+      liveness: /healthz/live
+      readiness: /healthz/ready
+    env:
+      PersistenceService__BaseUrl: http://{{ include "kalamar.fullname" . }}-persistence:8080/
+    resources:
+      requests: { cpu: 50m, memory: 96Mi }
+      limits: { memory: 256Mi }
+    podSecurityContext:
+      runAsNonRoot: true
+
+  task:
+    enabled: true
+    replicas: 1
+    port: 8080
+    probes:
+      liveness: /healthz/live
+      readiness: /healthz/ready
+    env:
+      PersistenceService__BaseUrl: http://{{ include "kalamar.fullname" . }}-persistence:8080/
+      UserService__BaseUrl: http://{{ include "kalamar.fullname" . }}-user:8080/
+    resources:
+      requests: { cpu: 50m, memory: 96Mi }
+      limits: { memory: 256Mi }
+    podSecurityContext:
+      runAsNonRoot: true
+
+  gateway:
+    enabled: true
+    replicas: 1
+    port: 8080
+    probes:
+      liveness: /healthz/live
+      readiness: /healthz/ready
+    # Tarayıcı istekleri ingress üzerinden aynı origin'den geldiği için CORS ayarı gerekmez.
+    # Bu adresler GatewayService/appsettings.json'daki YARP cluster adreslerini ezer.
+    env:
+      ReverseProxy__Clusters__users-cluster__Destinations__users-destination__Address: http://{{ include "kalamar.fullname" . }}-user:8080/
+      ReverseProxy__Clusters__tasks-cluster__Destinations__tasks-destination__Address: http://{{ include "kalamar.fullname" . }}-task:8080/
+    resources:
+      requests: { cpu: 50m, memory: 96Mi }
+      limits: { memory: 256Mi }
+    podSecurityContext:
+      runAsNonRoot: true
+
+  frontend:
+    enabled: true
+    replicas: 1
+    port: 80
+    probes:
+      liveness: /healthz
+      readiness: /healthz
+    # nginx container'ı; .NET'e özgü commonEnv'i almaz.
+    skipCommonEnv: true
+    env:
+      API_UPSTREAM: http://{{ include "kalamar.fullname" . }}-gateway:8080
+    resources:
+      requests: { cpu: 10m, memory: 16Mi }
+      limits: { memory: 64Mi }
+    # nginx 80 portunu açmak için root olarak başlar.
+    podSecurityContext: {}
+
+# Tüm uygulama container'larına uygulanır.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+
+ingress:
+  enabled: true
+  # k3s/k3d ile birlikte gelen ingress controller.
+  className: traefik
+  # *.localhost adreslerini tarayıcılar otomatik olarak 127.0.0.1'e çözer; hosts dosyası gerekmez.
+  host: kalamar.localhost
+  annotations: {}
+  # Örn. [{ secretName: kalamar-tls, hosts: [kalamar.localhost] }]
+  tls: []
 
 sqlserver:
-  saPassword: "ChangeMe"
+  enabled: true
+  image: mcr.microsoft.com/mssql/server:2022-latest
+  pullPolicy: IfNotPresent
+  # SA şifresi şu iki yoldan biriyle verilir; ikisi de boşsa chart anlaşılır bir hatayla durur.
+  # 1) existingSecret: önceden oluşturulmuş bir Secret'ın adı. Chart Secret üretmez. Örnek:
+  #      kubectl create secret generic kalamar-sql -n <ns> --from-literal=MSSQL_SA_PASSWORD=<sifre>
+  # 2) sealedSaPassword: `kubeseal --raw` ile şifrelenmiş değer. Chart bir SealedSecret üretir;
+  #      cluster'daki sealed-secrets controller onu Secret'a çevirir. Git'e girmesi güvenlidir.
+  #      Şifreleme "<fullname>-sqlserver" adı ve release namespace'i için yapılmalıdır
+  #      (Faz 5: deploy/scripts/seal-sqlserver-secret.ps1).
+  # Not: şifre connection string'e girdiği için ';' içermemelidir.
+  existingSecret: ""
+  existingSecretKey: MSSQL_SA_PASSWORD
+  sealedSaPassword: ""
+  # SQL Server'ın kullanacağı bellek (MB); container bellek limitinden düşük olmalı.
+  memoryLimitMb: 1536
+  # SQL Server, 2000 MB'tan az bellek limitiyle açılmayı reddeder.
+  resources:
+    requests: { cpu: 100m, memory: 1Gi }
+    limits: { memory: 2Gi }
   storage:
     size: 5Gi
+    # Boşsa cluster'ın varsayılan StorageClass'ı (k3d'de local-path) kullanılır.
+    storageClassName: ""

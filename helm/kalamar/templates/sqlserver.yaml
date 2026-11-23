@@ -1,0 +1,100 @@
+{{- if .Values.sqlserver.enabled }}
+{{- $name := include "kalamar.componentName" (dict "root" . "component" "sqlserver") }}
+{{- $ctx := dict "root" . "component" "sqlserver" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kalamar.labels" $ctx | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "kalamar.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: mssql
+      port: 1433
+      targetPort: mssql
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kalamar.labels" $ctx | nindent 4 }}
+  annotations:
+    # Argo CD önce veritabanını kurup Ready olmasını bekler, ardından uygulamalara (wave 0) geçer.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "kalamar.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kalamar.labels" $ctx | nindent 8 }}
+    spec:
+      securityContext:
+        # mssql image'ı 10001 (mssql) kullanıcısıyla çalışır; veri diski bu gruba yazılabilir olmalı.
+        fsGroup: 10001
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: sqlserver
+          image: {{ .Values.sqlserver.image | quote }}
+          imagePullPolicy: {{ .Values.sqlserver.pullPolicy }}
+          ports:
+            - name: mssql
+              containerPort: 1433
+              protocol: TCP
+          env:
+            - name: ACCEPT_EULA
+              value: "Y"
+            - name: MSSQL_MEMORY_LIMIT_MB
+              value: {{ .Values.sqlserver.memoryLimitMb | quote }}
+            {{- include "kalamar.sqlserver.passwordEnv" . | nindent 12 }}
+          # İlk açılışta sistem veritabanları oluşturulduğu için 2.5 dakikaya kadar beklenir.
+          startupProbe:
+            tcpSocket:
+              port: mssql
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: mssql
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -l 3 -Q "SELECT 1" -b -o /dev/null
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- with .Values.sqlserver.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/opt/mssql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "kalamar.selectorLabels" $ctx | nindent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.sqlserver.storage.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.sqlserver.storage.size }}
+{{- end }}

@@ -1,0 +1,15 @@
+# Lokal k3d cluster'ı (kalamar-dev namespace'i) için değerler. Argo CD bu dosyayı kullanır.
+# image.tag'i CI (Faz 4) her main build'inde git SHA'sıyla günceller; elle değiştirmeyin.
+
+image:
+  tag: ""
+
+ingress:
+  host: kalamar.localhost
+
+sqlserver:
+  # Faz 5'te deploy/scripts/seal-sqlserver-secret.ps1 bu alanı doldurur.
+  # O zamana kadar kurulum için: --set sqlserver.existingSecret=<secret-adı>
+  sealedSaPassword: ""
+  storage:
+    size: 2Gi

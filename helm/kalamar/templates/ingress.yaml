@@ -1,19 +1,44 @@
+{{- if .Values.ingress.enabled }}
+{{- $ctx := dict "root" . "component" "ingress" }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kalamar-ingress
-  namespace: {{ .Values.namespace }}
+  name: {{ include "kalamar.fullname" . }}
+  labels:
+    {{- include "kalamar.labels" $ctx | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   rules:
-    - host: kalamar.local
+    - host: {{ .Values.ingress.host | quote }}
       http:
         paths:
-          - path: /(.*)
+          {{- /* /api istekleri doğrudan gateway'e gider; yol değiştirilmez (rewrite yok). */}}
+          {{- if .Values.apps.gateway.enabled }}
+          - path: /api
             pathType: Prefix
             backend:
               service:
-                name: kalamar-frontend
+                name: {{ include "kalamar.componentName" (dict "root" . "component" "gateway") }}
                 port:
-                  number: 80
+                  name: http
+          {{- end }}
+          {{- if .Values.apps.frontend.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kalamar.componentName" (dict "root" . "component" "frontend") }}
+                port:
+                  name: http
+          {{- end }}
+{{- end }}

@@ -1,6 +1,12 @@
 apiVersion: v2
 name: kalamar
-description: Kalamar microservices deployment
+description: Kalamar task-management microservices (.NET 10) with SQL Server
 type: application
-version: 0.1.0
-appVersion: "1.0"
+# Chart'ın kendi versiyonu: şablonlar değiştikçe artırılır.
+version: 0.2.0
+# image.tag boş bırakılırsa image tag'i olarak bu değer kullanılır.
+# CI (Faz 4) values-dev.yaml'daki image.tag'i git SHA'sıyla günceller.
+appVersion: "0.2.0"
+home: https://github.com/BenKalender/Kalamar
+sources:
+  - https://github.com/BenKalender/Kalamar
