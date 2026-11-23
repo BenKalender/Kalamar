@@ -1,15 +1,21 @@
+const string FrontendCorsPolicy = "FrontendCors";
+
 var builder = WebApplication.CreateBuilder(args);
+
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("FrontendCors", policy =>
+    options.AddPolicy(FrontendCorsPolicy, policy =>
     {
         policy
-            .WithOrigins("http://localhost:8084")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
+
+builder.Services.AddHealthChecks();
 
 builder.Services
     .AddReverseProxy()
@@ -17,7 +23,9 @@ builder.Services
 
 var app = builder.Build();
 
-app.UseCors("FrontendCors");
+app.UseCors(FrontendCorsPolicy);
+app.MapHealthChecks("/healthz/live");
+app.MapHealthChecks("/healthz/ready");
 app.MapReverseProxy();
 
-app.Run();
+await app.RunAsync();

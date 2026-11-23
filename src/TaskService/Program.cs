@@ -4,8 +4,8 @@ using TaskService.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddOpenApi();
+builder.Services.AddHealthChecks();
 
 builder.Services.AddHttpClient<IPersistenceTaskClient, PersistenceTaskClient>((serviceProvider, client) =>
 {
@@ -24,12 +24,11 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
 app.MapControllers();
-app.Urls.Clear();
-app.Urls.Add("http://0.0.0.0:8083");
-app.Run();
+app.MapHealthChecks("/healthz/live");
+app.MapHealthChecks("/healthz/ready");
+
+await app.RunAsync();

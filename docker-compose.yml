@@ -1,4 +1,5 @@
-version: "3.9"
+# Lokal geliştirme ortamı. Şifre .env dosyasındaki SA_PASSWORD değişkeninden gelir (bkz. .env.example).
+# Tüm .NET servisleri container içinde 8080 portunu dinler; host portları 8080-8084 arasındadır.
 
 services:
   sqlserver:
@@ -6,7 +7,7 @@ services:
     container_name: kalamar-sqlserver
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: "${SA_PASSWORD}"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD:?SA_PASSWORD .env dosyasinda tanimli olmali}"
       MSSQL_MEMORY_LIMIT_MB: "1024"
     ports:
       - "1433:1433"
@@ -14,7 +15,7 @@ services:
       - sqlserver-data:/var/opt/mssql
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${SA_PASSWORD}\" -C -Q \"SELECT 1\" || exit 1"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q \"SELECT 1\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -27,10 +28,10 @@ services:
     image: kalamar/persistence-service:dev
     container_name: kalamar-persistence
     environment:
-      ASPNETCORE_URLS: "http://+:8082"
       ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=KalamarDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+      Database__MigrateOnStartup: "true"
     ports:
-      - "8082:8082"
+      - "8082:8080"
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -42,11 +43,9 @@ services:
     image: kalamar/user-service:dev
     container_name: kalamar-user
     environment:
-      ASPNETCORE_URLS: "http://+:8081"
-      ASPNETCORE_HTTP_PORTS: ""
-      PersistenceService__BaseUrl: "http://persistence-service:8082/"
+      PersistenceService__BaseUrl: "http://persistence-service:8080/"
     ports:
-      - "8081:8081"
+      - "8081:8080"
     depends_on:
       - persistence-service
 
@@ -57,11 +56,9 @@ services:
     image: kalamar/task-service:dev
     container_name: kalamar-task
     environment:
-      ASPNETCORE_URLS: "http://+:8083"
-      ASPNETCORE_HTTP_PORTS: ""
-      PersistenceService__BaseUrl: "http://persistence-service:8082/"
+      PersistenceService__BaseUrl: "http://persistence-service:8080/"
     ports:
-      - "8083:8083"
+      - "8083:8080"
     depends_on:
       - persistence-service
 
@@ -72,9 +69,9 @@ services:
     image: kalamar/gateway-service:dev
     container_name: kalamar-gateway
     environment:
-      ASPNETCORE_URLS: "http://+:8080"
-      ReverseProxy__Clusters__users-cluster__Destinations__users-destination__Address: "http://kalamar-user:8081/"
-      ReverseProxy__Clusters__tasks-cluster__Destinations__tasks-destination__Address: "http://kalamar-task:8083/"
+      Cors__AllowedOrigins__0: "http://localhost:8084"
+      ReverseProxy__Clusters__users-cluster__Destinations__users-destination__Address: "http://user-service:8080/"
+      ReverseProxy__Clusters__tasks-cluster__Destinations__tasks-destination__Address: "http://task-service:8080/"
     ports:
       - "8080:8080"
     depends_on:
