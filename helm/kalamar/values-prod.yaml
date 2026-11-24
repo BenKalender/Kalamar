@@ -4,7 +4,7 @@
 # İçerik, dev'de test edilmiş image'ın aynısıdır: yeniden build edilmez, mevcut image'a sürüm etiketi eklenir.
 
 image:
-  tag: "0.6.0"
+  tag: "0.7.0"
 ingress:
   host: kalamar-prod.localhost
 sqlserver:
