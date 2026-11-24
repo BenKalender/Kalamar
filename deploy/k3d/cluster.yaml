@@ -1,0 +1,28 @@
+# Lokal Kalamar cluster'ı: Docker içinde k3s (1 server + 1 agent).
+#   k3d cluster create --config deploy/k3d/cluster.yaml   (bootstrap.ps1 bunu çağırır)
+#   k3d cluster delete kalamar                              (her şeyi siler)
+# k3s'in gömülü Traefik ingress controller'ı ve local-path StorageClass'ı kullanılır.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: kalamar
+servers: 1
+agents: 1
+image: rancher/k3s:v1.35.10-k3s1
+# Kubernetes API yalnızca bu makineden erişilebilir.
+kubeAPI:
+  hostIP: "127.0.0.1"
+  hostPort: "6550"
+ports:
+  # Traefik (80) -> http://kalamar.localhost:8000 ve http://argocd.localhost:8000
+  # 127.0.0.1'e bağlanır; aynı ağdaki diğer makinelerden erişilemez.
+  - port: 127.0.0.1:8000:80
+    nodeFilters:
+      - loadbalancer
+options:
+  k3d:
+    wait: true
+    timeout: "180s"
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

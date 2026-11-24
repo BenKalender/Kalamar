@@ -1,0 +1,38 @@
+# Kalamar uygulaması: helm/kalamar chart'ı values-dev.yaml ile kalamar-dev namespace'ine kurulur.
+# Release workflow'u values-dev.yaml'daki image.tag'i her main build'inde günceller; Argo CD bu
+# değişikliği (~3 dk içinde) görüp yeni image'ları deploy eder.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kalamar-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/BenKalender/Kalamar.git
+    targetRevision: main
+    path: helm/kalamar
+    helm:
+      # Kaynak adları <releaseName>-<bileşen> olur: kalamar-dev-user, kalamar-dev-sqlserver, ...
+      # seal-sqlserver-secret.ps1 de bu adla (kalamar-dev-sqlserver) şifreler.
+      releaseName: kalamar-dev
+      valueFiles:
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kalamar-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    # İlk kurulumda SealedSecret CRD'si henüz hazır değilse sync başarısız olur; Argo CD tekrar dener.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
