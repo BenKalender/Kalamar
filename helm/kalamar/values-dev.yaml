@@ -2,11 +2,9 @@
 # image.tag'i CI (Faz 4) her main build'inde git SHA'sıyla günceller; elle değiştirmeyin.
 
 image:
-  tag: ""
-
+  tag: "a90ebbc"
 ingress:
   host: kalamar.localhost
-
 sqlserver:
   # Faz 5'te deploy/scripts/seal-sqlserver-secret.ps1 bu alanı doldurur.
   # O zamana kadar kurulum için: --set sqlserver.existingSecret=<secret-adı>
