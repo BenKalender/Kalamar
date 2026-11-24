@@ -1,0 +1,22 @@
+# App-of-apps: Argo CD bu Application üzerinden deploy/argocd/apps/ altındaki tüm Application'ları
+# main branch'inden okuyup kurar. Elle yalnızca bir kez uygulanır (bootstrap.ps1):
+#   kubectl apply -f deploy/argocd/root-app.yaml
+# Yeni bir uygulama eklemek için apps/ altına bir Application dosyası koyup main'e merge etmek yeterli.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/BenKalender/Kalamar.git
+    targetRevision: main
+    path: deploy/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

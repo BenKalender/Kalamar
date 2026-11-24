@@ -8,6 +8,6 @@ ingress:
 sqlserver:
   # Faz 5'te deploy/scripts/seal-sqlserver-secret.ps1 bu alanı doldurur.
   # O zamana kadar kurulum için: --set sqlserver.existingSecret=<secret-adı>
-  sealedSaPassword: ""
+  sealedSaPassword: "AgAAf2lxiGkLKv62e2NxeKoqC7P/ort8Hz3hMyR8pkerIOVGo0GOy+dt84Tv0yedmnCrtN7tA7vcqWjtSjO4asEHIMxzkJ8lrgjGQs1eZv/JJoao8zEkI21Xjo5+3smh2AffZCxpV54Wre6l87Ab+zhbLye1N8ytIJvbVMKQMlzoIPdWd+Y177GYddN3hGltbkQ7F4UmMIayhCsN3QYa1Hga7hDZe6FYfpb1e4P3/tRH+FuXdPbI8x2RlVzzYw4MTp11mrec5hVctNoCZpKAEQHJA0BbpkhRaifdl9m4QWSrS9P95ie9bHMq5ZnczJ3fxmBlC/bTDS9nopCf9JIMDoUeogxHTLZtD0ZNjXjNj0YuAlq6i9XwEOxXkdZHAR61+RfCa15QGPifUXmGi4vMt0C9sBybqawJxOZxPPbErbILQ7AKgw5ddUMjR9XOnd9vR/MVGHS0jFYicQWrjK3Ck68baZpmfre27pDzOWXyGnBd2ZZOwjjv//+0SFIlRSMj6Xqkublt/LOzm+PYUPB4tE67Di8RdRlQuvHrhVxWI07xd13KWVb48nHDTjYCcxspRMKvR+UHVIRxlINk1ElJ1mRN8WqgE5OTdouduzZg9bLFd3TWnvzky/SHAtMaGoY6N3INmHzUG2eDyoNlbTxXja8YVAj5O1c0spdOi2bosxWZVpDO+FnXaQ3BYd4ewMy00ov9oAf93UCIqdmEFjaBRt1k+0NLeWnvEi7/fNIQ4w=="
   storage:
     size: 2Gi

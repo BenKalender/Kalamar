@@ -86,11 +86,12 @@ jobs:
         run: |
           curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
             | tar xz kubeconform
-          # SealedSecret bir CRD'dir; şeması datree CRDs-catalog'dan alınır.
+          # SealedSecret ve Argo CD Application birer CRD'dir; şemaları datree CRDs-catalog'dan alınır.
+          # deploy/argocd/argocd-values.yaml bir manifest değil, Helm değer dosyası olduğu için listede yok.
           ./kubeconform -strict -summary \
             -schema-location default \
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-            rendered/*.yaml
+            rendered/*.yaml deploy/argocd/root-app.yaml deploy/argocd/apps/*.yaml
 
   images:
     name: Docker build (${{ matrix.service }})

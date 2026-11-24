@@ -3,7 +3,7 @@ name: kalamar
 description: Kalamar task-management microservices (.NET 10) with SQL Server
 type: application
 # Chart'ın kendi versiyonu: şablonlar değiştikçe artırılır.
-version: 0.2.0
+version: 0.2.1
 # image.tag boş bırakılırsa image tag'i olarak bu değer kullanılır.
 # CI (Faz 4) values-dev.yaml'daki image.tag'i git SHA'sıyla günceller.
 appVersion: "0.2.0"
