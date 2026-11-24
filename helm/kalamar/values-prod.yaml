@@ -1,0 +1,14 @@
+# Lokal k3d cluster'ındaki "prod" ortamı (kalamar-prod namespace'i). Argo CD bu dosyayı kullanır.
+# Dev'den farkı: her main build'i değil, yalnızca sürüm tag'leri (vX.Y.Z) buraya gelir.
+# image.tag'i promote workflow'u (.github/workflows/promote.yml) tag push'unda günceller; elle değiştirmeyin.
+# İçerik, dev'de test edilmiş image'ın aynısıdır: yeniden build edilmez, mevcut image'a sürüm etiketi eklenir.
+
+image:
+  tag: "0.6.0"
+ingress:
+  host: kalamar-prod.localhost
+sqlserver:
+  # deploy/scripts/seal-sqlserver-secret.ps1 -Environment prod bu alanı doldurur (dev'den ayrı bir şifre).
+  sealedSaPassword: "AgB5sVjpW8BIw5TLLqLIEvJIJGLZ8tegBZAy6NIZcKUqKUXAT4BQ1aR6YTszFZ8aTrhRWm7A0Le5iUiHUxuai19nC2vZ9sQcS9Bf92blwJ/Sma0kPU9AfahrKoiVK+J8PmarYiyiEmN/19o7xjtk8SljUkxrI4xDaK8hN+ARmSb1/y/c27rJzrSaKLPDCrzUuIxr4bsiVwF+6Md+cYIyQDoX4eCRxvbz3zdwZvqI6Qo12ngCL0yNswXIJc4Hxviid53wJsHaBUiM3mqe1cBAbMK6MdHGTmlF4AMtLIZl1gi3LUugKzNxxH8EyhFDV1fvkJMS5rKSs0Yvjck6tGP5eiVqR5Pn6wMcNhYofs8yPc5Eve3lIWjTQiyQieozXyQL/YOE1s6fJCOK0lEjTdE5JDhWUMNVViA9GYNMX7/2DdBt7DfKilFWs3cbur5UeqdGFLP3U6Ic4FJapYRGugLrjB3yJmYYtEmiKGi8iJZUqjKUgCT2kVx7KgLoBrq+HRc+i6k1ocXwYX63/5hKa8lF5PaUZYTiLN04xHhX0Apme03YwlXnvbTgx2a3zi1xwZBq8DBFxq1XW8tmN43LSNS60sNl0hPa88vBgcGAUy5oR4WlmFOziwZadNMKSP4Srz2GcOK2R9TVtMwghPuCg4yGMQPJ3NUnFdEQCqDBGbhCSJwcCEDm1T8s59UI59XmtPPo3n7oTQHtQ8MNoRV/SN3jY4DcIoI0jE2oCPU="
+  storage:
+    size: 2Gi

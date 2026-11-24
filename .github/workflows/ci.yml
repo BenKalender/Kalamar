@@ -62,7 +62,10 @@ jobs:
 
       # Chart, SA şifresi için bir kaynak ister; CI'da sahte bir Secret adı verilir.
       - name: Lint
-        run: helm lint --strict "$CHART" -f "$CHART/values-dev.yaml" --set sqlserver.existingSecret=ci
+        run: |
+          for env in dev prod; do
+            helm lint --strict "$CHART" -f "$CHART/values-$env.yaml" --set sqlserver.existingSecret=ci
+          done
 
       - name: Render (existingSecret ve SealedSecret modları)
         run: |
@@ -75,6 +78,17 @@ jobs:
           if grep -q "kind: SealedSecret" rendered/existing-secret.yaml; then
             echo "::error::existingSecret verildiğinde SealedSecret render edilmemeli"; exit 1
           fi
+
+      # Argo CD'nin yaptığı gibi, ek --set olmadan: sealedSaPassword dolu olmalı (seal-sqlserver-secret.ps1).
+      - name: Render (Argo CD ortamları)
+        run: |
+          for env in dev prod; do
+            if ! helm template "kalamar-$env" "$CHART" -n "kalamar-$env" -f "$CHART/values-$env.yaml" \
+                > "rendered/argocd-$env.yaml"; then
+              echo "::error::values-$env.yaml render edilemedi; sealedSaPassword boş olabilir (seal-sqlserver-secret.ps1 -Environment $env)"
+              exit 1
+            fi
+          done
 
       - name: Şifre kaynağı yoksa render başarısız olmalı
         run: |

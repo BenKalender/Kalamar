@@ -1,0 +1,181 @@
+# Bir sürüm tag'i (vX.Y.Z) push edildiğinde dev'de çalışan sürümü prod'a taşır:
+#   1. Tag'lenen commit'teki values-dev.yaml'dan dev'de çalışan image tag'i (kısa sha) okunur.
+#      Tag'teki uygulama kodu o image'la birebir aynı değilse (release henüz bitmediyse) durur.
+#   2. Image'lar yeniden build edilmez; aynı image'a sürüm etiketi eklenir:
+#        ghcr.io/<owner>/kalamar-<servis>:<sha>  →  ghcr.io/<owner>/kalamar-<servis>:X.Y.Z
+#      Bir sürüm etiketi bir kez verildikten sonra başka bir image'a taşınamaz.
+#   3. helm/kalamar/values-prod.yaml'daki image.tag X.Y.Z yapılıp main'e commit'lenir; Argo CD
+#      kalamar-prod'u günceller.
+#   4. Tag için bir GitHub Release oluşturulur.
+#
+# Geri dönmek (rollback) için: Actions → Promote → Run workflow, eski bir tag (örn. v0.6.0) girilir.
+# Ek secret gerekmez; GHCR ve main'e GITHUB_TOKEN ile yazılır.
+name: Promote
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Prod'a alınacak mevcut sürüm tag'i (örn. v0.6.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Promote'lar sırayla çalışır; values-prod.yaml'a iki çalışma aynı anda yazmaz.
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+env:
+  # Kullanıcı girdisi run bloklarına doğrudan değil, env üzerinden verilir.
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  resolve:
+    name: Tag'i çözümle
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      source: ${{ steps.resolve.outputs.source }}
+      services: ${{ steps.resolve.outputs.services }}
+    steps:
+      # Tag'ler ve main'in tam geçmişi gerekir.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # yq, GitHub'ın ubuntu runner image'ında hazır gelir.
+      - name: Tag, sürüm ve kaynak image
+        id: resolve
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::'$TAG' bir sürüm tag'i değil (beklenen: vX.Y.Z)"; exit 1
+          fi
+          VERSION="${BASH_REMATCH[1]}"
+
+          if ! git rev-parse -q --verify "refs/tags/$TAG^{commit}" > /dev/null; then
+            echo "::error::'$TAG' tag'i repoda yok"; exit 1
+          fi
+          if ! git merge-base --is-ancestor "refs/tags/$TAG" origin/main; then
+            echo "::error::'$TAG' main üzerinde değil; yalnızca main'deki commit'ler prod'a alınır"; exit 1
+          fi
+
+          # Tag anındaki dev image'ı; release workflow'u bunu commit sha'sıyla build etmiştir.
+          SOURCE="$(git show "refs/tags/$TAG:helm/kalamar/values-dev.yaml" | yq '.image.tag')"
+          if [[ ! "$SOURCE" =~ ^[0-9a-f]{7,40}$ ]] || ! git rev-parse -q --verify "$SOURCE^{commit}" > /dev/null; then
+            echo "::error::values-dev.yaml'daki image.tag ('$SOURCE') bir commit'e karşılık gelmiyor"; exit 1
+          fi
+          # Uygulama kodu image'ın build edildiği commit'ten sonra değiştiyse yeni image henüz dev'e
+          # gelmemiştir; o durumda eski image yanlışlıkla yeni sürüm diye etiketlenmesin.
+          if ! git diff --quiet "$SOURCE" "refs/tags/$TAG" -- src Directory.Build.props global.json; then
+            echo "::error::$TAG'teki kod dev'deki image'dan ($SOURCE) farklı. Release'in bot commit'ini (chore(dev): deploy ...) bekleyip tag'i onun üzerine atın."
+            exit 1
+          fi
+
+          # Servis listesi chart'tan okunur (values.yaml → apps), böylece üçüncü bir liste tutulmaz.
+          SERVICES="$(git show "refs/tags/$TAG:helm/kalamar/values.yaml" | yq -o=json -I=0 '.apps | keys')"
+
+          {
+            echo "version=$VERSION"
+            echo "source=$SOURCE"
+            echo "services=$SERVICES"
+          } >> "$GITHUB_OUTPUT"
+          echo "$TAG → $VERSION, kaynak image tag'i: $SOURCE, servisler: $SERVICES"
+
+  images:
+    name: Sürüm etiketi ekle
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      SOURCE: ${{ needs.resolve.outputs.source }}
+      SERVICES: ${{ needs.resolve.outputs.services }}
+    steps:
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # imagetools create yalnızca registry'de yeni bir etiket yazar; image katmanları kopyalanmaz.
+      - name: <sha> → <sürüm>
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          for svc in $(jq -r '.[]' <<< "$SERVICES"); do
+            IMAGE="ghcr.io/$OWNER/kalamar-$svc"
+            src_digest="$(docker buildx imagetools inspect "$IMAGE:$SOURCE" --format '{{.Manifest.Digest}}')"
+            if dst_digest="$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{.Manifest.Digest}}' 2> /dev/null)"; then
+              if [[ "$dst_digest" == "$src_digest" ]]; then
+                echo "$IMAGE:$VERSION zaten $SOURCE ile aynı ($src_digest)"; continue
+              fi
+              echo "::error::$IMAGE:$VERSION başka bir image'ı gösteriyor ($dst_digest); sürüm etiketleri değiştirilemez"
+              exit 1
+            fi
+            docker buildx imagetools create --tag "$IMAGE:$VERSION" "$IMAGE@$src_digest"
+            echo "$IMAGE:$VERSION → $SOURCE ($src_digest)"
+          done
+
+  deploy-prod:
+    name: values-prod.yaml güncelle ve release oluştur
+    needs: [resolve, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      SOURCE: ${{ needs.resolve.outputs.source }}
+      VALUES_FILE: helm/kalamar/values-prod.yaml
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # Push çakışmasında `git pull --rebase` ortak geçmişi bulabilsin diye tam geçmiş çekilir.
+          fetch-depth: 0
+
+      # Tag her zaman tırnaklı yazılır; aksi halde 1.0 gibi bir değer YAML'da sayı olarak okunur.
+      - name: image.tag'i güncelle
+        run: |
+          yq -i '.image.tag = strenv(VERSION) | .image.tag style="double"' "$VALUES_FILE"
+          git diff -- "$VALUES_FILE"
+
+      # GITHUB_TOKEN ile yapılan push yeni bir workflow tetiklemez; [skip ci] yine de açıkça belirtir.
+      - name: Commit & push
+        run: |
+          if git diff --quiet -- "$VALUES_FILE"; then
+            echo "values-prod.yaml zaten $VERSION; commit gerekmiyor."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(prod): deploy $TAG ($SOURCE) to kalamar-prod [skip ci]" -- "$VALUES_FILE"
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push başarısız (deneme $attempt), tekrar denenecek..."
+            sleep 5
+          done
+          exit 1
+
+      # gh, ubuntu runner image'ında hazır gelir. Release zaten varsa (rollback, yeniden çalıştırma) dokunulmaz.
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "$TAG için release zaten var."
+            exit 0
+          fi
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          NOTES="Image'lar: \`ghcr.io/$OWNER/kalamar-<servis>:$VERSION\` (dev'de test edilen \`$SOURCE\` ile aynı image)."
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes "$NOTES" --generate-notes

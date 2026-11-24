@@ -32,7 +32,7 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ClusterConfig = Join-Path $RepoRoot 'deploy\k3d\cluster.yaml'
 $ArgoCdValues = Join-Path $RepoRoot 'deploy\argocd\argocd-values.yaml'
 $RootApp = Join-Path $RepoRoot 'deploy\argocd\root-app.yaml'
-$ValuesDev = Join-Path $RepoRoot 'helm\kalamar\values-dev.yaml'
+$Environments = @('dev', 'prod')
 $SealedKeyLabel = 'sealedsecrets.bitnami.com/sealed-secrets-key'
 
 function Write-Step([string]$Message) {
@@ -170,13 +170,17 @@ $adminPassword = if ($encoded) { [Text.Encoding]::UTF8.GetString([Convert]::From
 
 Write-Step 'Hazır'
 Write-Host "  Argo CD UI : http://argocd.localhost:8000   (kullanıcı: admin, şifre: $adminPassword)"
-Write-Host '  Uygulama   : http://kalamar.localhost:8000'
+Write-Host '  Dev        : http://kalamar.localhost:8000        (her main build''i)'
+Write-Host '  Prod       : http://kalamar-prod.localhost:8000   (yalnızca vX.Y.Z tag''leri)'
 Write-Host '  Durum      : kubectl get applications -n argocd'
 Write-Host '               kubectl get pods -n kalamar-dev'
 
-$valuesContent = [IO.File]::ReadAllText($ValuesDev)
-if ($valuesContent -cmatch '(?m)^\s*sealedSaPassword:\s*""\s*$') {
-    Write-Host ''
-    Write-Host 'values-dev.yaml içinde sealedSaPassword boş; kalamar-dev uygulaması şifre kaynağı olmadan render edilemez.' -ForegroundColor Yellow
-    Write-Host 'Sıradaki adım: .\deploy\scripts\seal-sqlserver-secret.ps1, ardından değişikliği commit edip main''e push edin.' -ForegroundColor Yellow
+foreach ($envName in $Environments) {
+    $valuesFile = Join-Path $RepoRoot "helm\kalamar\values-$envName.yaml"
+    $valuesContent = [IO.File]::ReadAllText($valuesFile)
+    if ($valuesContent -cmatch '(?m)^\s*sealedSaPassword:\s*""\s*$') {
+        Write-Host ''
+        Write-Host "values-$envName.yaml içinde sealedSaPassword boş; kalamar-$envName uygulaması şifre kaynağı olmadan render edilemez." -ForegroundColor Yellow
+        Write-Host "Sıradaki adım: .\deploy\scripts\seal-sqlserver-secret.ps1 -Environment $envName, ardından değişikliği commit edip main'e push edin." -ForegroundColor Yellow
+    }
 }
