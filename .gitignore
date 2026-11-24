@@ -25,7 +25,8 @@ packages/
 [Bb]in/
 [Oo]bj/
 
-# Environment/overrides
+# Lokal secret dosyaları. Docker Compose kaldırıldı; eski kopyalar yanlışlıkla commit'lenmesin diye
+# ignore'da kalıyor. Sealed Secrets anahtar yedeği repo dışında durur (%USERPROFILE%\.kalamar\).
 .env
 docker-compose.override.yml
 values.local.yaml
