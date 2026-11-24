@@ -1,0 +1,126 @@
+# Her PR'da çalışır: .NET build + test, Helm chart doğrulaması ve image'ların push'suz build'i.
+# Release workflow'u (release.yml) da bu dosyayı workflow_call ile çağırır; image'ları zaten
+# kendisi build ettiği için skip-images: true geçer.
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      skip-images:
+        description: Docker image build job'unu atla
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Aynı PR'a yeni commit gelince eski çalışma iptal edilir; main'deki release çalışmaları iptal edilmez.
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  CHART: helm/kalamar
+  # Argo CD v3.6 ile gelen Helm sürümü; chart CI'da da Argo CD'deki gibi render edilir.
+  HELM_VERSION: v4.3.2
+  KUBECONFORM_VERSION: v0.8.0
+
+jobs:
+  dotnet:
+    name: .NET build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Kalamar.sln
+
+      - name: Build
+        run: dotnet build Kalamar.sln -c Release --no-restore
+
+      # xUnit v3 + Microsoft.Testing.Platform (global.json'da açık); --solution zorunlu.
+      - name: Test
+        run: dotnet test --solution Kalamar.sln -c Release --no-build
+
+  helm:
+    name: Helm lint & render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # Chart, SA şifresi için bir kaynak ister; CI'da sahte bir Secret adı verilir.
+      - name: Lint
+        run: helm lint --strict "$CHART" -f "$CHART/values-dev.yaml" --set sqlserver.existingSecret=ci
+
+      - name: Render (existingSecret ve SealedSecret modları)
+        run: |
+          mkdir -p rendered
+          helm template kalamar-dev "$CHART" -n kalamar-dev -f "$CHART/values-dev.yaml" \
+            --set sqlserver.existingSecret=ci > rendered/existing-secret.yaml
+          helm template kalamar-dev "$CHART" -n kalamar-dev -f "$CHART/values-dev.yaml" \
+            --set sqlserver.sealedSaPassword=AgCiPlaceholder > rendered/sealed-secret.yaml
+          grep -q "kind: SealedSecret" rendered/sealed-secret.yaml
+          if grep -q "kind: SealedSecret" rendered/existing-secret.yaml; then
+            echo "::error::existingSecret verildiğinde SealedSecret render edilmemeli"; exit 1
+          fi
+
+      - name: Şifre kaynağı yoksa render başarısız olmalı
+        run: |
+          if helm template kalamar-dev "$CHART" > /dev/null 2>&1; then
+            echo "::error::sqlserver.existingSecret / sealedSaPassword olmadan helm template başarılı oldu"; exit 1
+          fi
+
+      - name: Kubernetes şemalarına göre doğrula (kubeconform)
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz kubeconform
+          # SealedSecret bir CRD'dir; şeması datree CRDs-catalog'dan alınır.
+          ./kubeconform -strict -summary \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            rendered/*.yaml
+
+  images:
+    name: Docker build (${{ matrix.service }})
+    if: ${{ !inputs.skip-images }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Liste release.yml'deki matrix ile aynı olmalı.
+      matrix:
+        include:
+          - service: persistence
+            dockerfile: src/PersistenceService/Dockerfile
+          - service: user
+            dockerfile: src/UserService/Dockerfile
+          - service: task
+            dockerfile: src/TaskService/Dockerfile
+          - service: gateway
+            dockerfile: src/GatewayService/Dockerfile
+          - service: frontend
+            dockerfile: src/Frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build (push yok)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

@@ -1,0 +1,132 @@
+# main'e uygulama kodu girdiğinde çalışır:
+#   1. CI (ci.yml): build, test, helm doğrulaması
+#   2. 5 image GHCR'a push edilir: ghcr.io/<owner>/kalamar-<servis>:<kısa-sha> ve :latest
+#   3. helm/kalamar/values-dev.yaml içindeki image.tag kısa sha ile güncellenip main'e commit'lenir.
+#      Argo CD (Faz 5) bu commit'i görüp lokal cluster'ı yeni image'larla günceller.
+# Ek secret gerekmez; GHCR'a GITHUB_TOKEN ile push edilir.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "Directory.Build.props"
+      - "global.json"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Release'ler sırayla çalışır; çalışan bir release iptal edilmez.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      skip-images: true
+
+  images:
+    name: Push image (${{ matrix.service }})
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      # Liste ci.yml'deki matrix ile aynı olmalı.
+      matrix:
+        include:
+          - service: persistence
+            dockerfile: src/PersistenceService/Dockerfile
+          - service: user
+            dockerfile: src/UserService/Dockerfile
+          - service: task
+            dockerfile: src/TaskService/Dockerfile
+          - service: gateway
+            dockerfile: src/GatewayService/Dockerfile
+          - service: frontend
+            dockerfile: src/Frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+
+      # GHCR image adları küçük harf olmalı (BenKalender -> benkalender).
+      - name: Image adı ve tag
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kalamar-${{ matrix.service }}" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.IMAGE }}:latest
+          # source label'ı GHCR paketini bu repoya bağlar.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=kalamar-${{ matrix.service }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  bump-dev:
+    name: values-dev.yaml image.tag güncelle
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VALUES_FILE: helm/kalamar/values-dev.yaml
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # Push çakışmasında `git pull --rebase` ortak geçmişi bulabilsin diye tam geçmiş çekilir.
+          fetch-depth: 0
+
+      # yq, GitHub'ın ubuntu runner image'ında hazır gelir. Tag her zaman tırnaklı yazılır;
+      # aksi halde "1234567" veya "12e4567" gibi bir sha YAML'da sayı olarak okunur.
+      - name: image.tag'i güncelle
+        run: |
+          export TAG="${GITHUB_SHA::7}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          yq -i '.image.tag = strenv(TAG) | .image.tag style="double"' "$VALUES_FILE"
+          git diff -- "$VALUES_FILE"
+
+      # GITHUB_TOKEN ile yapılan push yeni bir workflow tetiklemez; [skip ci] yine de açıkça belirtir.
+      - name: Commit & push
+        run: |
+          if git diff --quiet -- "$VALUES_FILE"; then
+            echo "values-dev.yaml zaten $TAG; commit gerekmiyor."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(dev): deploy $TAG to kalamar-dev [skip ci]" -- "$VALUES_FILE"
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push başarısız (deneme $attempt), tekrar denenecek..."
+            sleep 5
+          done
+          exit 1
