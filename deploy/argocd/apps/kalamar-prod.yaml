@@ -1,0 +1,36 @@
+# Kalamar "prod" ortamı: helm/kalamar chart'ı values-prod.yaml ile kalamar-prod namespace'ine kurulur.
+# Dev'den farkı image.tag'in kaynağıdır: promote workflow'u yalnızca bir sürüm tag'i (vX.Y.Z) push
+# edildiğinde values-prod.yaml'ı günceller. Argo CD bu commit'i (~3 dk içinde) görüp deploy eder.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kalamar-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/BenKalender/Kalamar.git
+    targetRevision: main
+    path: helm/kalamar
+    helm:
+      # Kaynak adları kalamar-prod-<bileşen> olur; SealedSecret adı kalamar-prod-sqlserver.
+      releaseName: kalamar-prod
+      valueFiles:
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kalamar-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

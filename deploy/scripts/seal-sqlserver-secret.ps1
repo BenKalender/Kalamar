@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  SQL Server SA şifresini Sealed Secrets ile şifreleyip helm/kalamar/values-dev.yaml'a yazar.
+  SQL Server SA şifresini Sealed Secrets ile şifreleyip helm/kalamar/values-<ortam>.yaml'a yazar.
 
 .DESCRIPTION
   Şifre yalnızca bu cluster'daki sealed-secrets controller'ının anahtarıyla çözülebilecek şekilde,
@@ -10,20 +10,27 @@
 
 .EXAMPLE
   .\deploy\scripts\seal-sqlserver-secret.ps1
+
+.EXAMPLE
+  .\deploy\scripts\seal-sqlserver-secret.ps1 -Environment prod
 #>
 [CmdletBinding()]
 param(
-    [string]$Namespace = 'kalamar-dev',
+    # Ortam adı (dev/prod); Namespace, ReleaseName ve ValuesFile varsayılanları buradan türetilir.
+    [ValidatePattern('^[a-z0-9-]+$')]
+    [string]$Environment = 'dev',
+    [string]$Namespace = "kalamar-$Environment",
     # Argo CD Application'daki helm.releaseName; SealedSecret adı "<ReleaseName>-sqlserver" olur.
-    [string]$ReleaseName = 'kalamar-dev',
-    [string]$ValuesFile = (Join-Path $PSScriptRoot '..\..\helm\kalamar\values-dev.yaml'),
+    [string]$ReleaseName = "kalamar-$Environment",
+    [string]$ValuesFile = (Join-Path $PSScriptRoot "..\..\helm\kalamar\values-$Environment.yaml"),
+    # Şifreleme bu kubeconfig context'indeki cluster'ın anahtarıyla yapılır (aktif context'ten bağımsız).
+    [string]$Context = 'k3d-kalamar',
     # Verilmezse şifre iki kez sorulur.
     [SecureString]$Password
 )
 
 $ErrorActionPreference = 'Stop'
 
-$ExpectedContext = 'k3d-kalamar'
 $SecretName = "$ReleaseName-sqlserver"
 $KubesealUrl = 'https://github.com/bitnami/sealed-secrets/releases (kubeseal-<sürüm>-windows-amd64.tar.gz)'
 
@@ -56,9 +63,9 @@ foreach ($tool in @('kubectl', 'kubeseal')) {
 }
 $ValuesFile = (Resolve-Path $ValuesFile).Path
 
-$currentContext = (& kubectl config current-context | Out-String).Trim()
-if ($currentContext -ne $ExpectedContext) {
-    Write-Warning "Aktif kubectl context '$currentContext' (beklenen: '$ExpectedContext'). Değer bu cluster'ın anahtarıyla şifrelenecek."
+$contexts = @(& kubectl config get-contexts -o name)
+if ($contexts -cnotcontains $Context) {
+    throw "kubectl context '$Context' bulunamadı. Cluster kurulu mu? (.\deploy\scripts\bootstrap.ps1)"
 }
 
 # --- Şifre ------------------------------------------------------------------------------------
@@ -84,7 +91,7 @@ else {
 $tmp = [IO.Path]::GetTempFileName()
 try {
     [IO.File]::WriteAllText($tmp, $plain, (New-Object Text.UTF8Encoding $false))
-    $output = & kubeseal --raw --scope strict `
+    $output = & kubeseal --context $Context --raw --scope strict `
         --namespace $Namespace --name $SecretName `
         --controller-namespace kube-system --controller-name sealed-secrets-controller `
         "--from-file=$tmp"
@@ -99,7 +106,7 @@ finally {
 $sealed = (($output | Out-String) -creplace '\s', '')
 if ($sealed -cnotmatch '^[A-Za-z0-9+/=]+$') { throw 'kubeseal beklenmeyen bir çıktı üretti.' }
 
-# --- values-dev.yaml --------------------------------------------------------------------------
+# --- values-<ortam>.yaml ----------------------------------------------------------------------
 $content = [IO.File]::ReadAllText($ValuesFile)
 $pattern = '(?m)^(?<key>[ \t]*sealedSaPassword:)[^\r\n]*'
 $matchCount = ([regex]::Matches($content, $pattern)).Count
@@ -112,5 +119,5 @@ Write-Host "Şifrelenmiş değer yazıldı: $ValuesFile" -ForegroundColor Green
 Write-Host "  (SealedSecret: $Namespace/$SecretName; yalnızca bu cluster'ın anahtarıyla çözülebilir)"
 Write-Host ''
 Write-Host 'Sıradaki adım: değişikliği commit edip main''e push edin; Argo CD SealedSecret''ı ve SQL Server''ı kurar.'
-Write-Host '  git add helm/kalamar/values-dev.yaml'
-Write-Host '  git commit -m "Seal SQL Server SA password for kalamar-dev"'
+Write-Host "  git add helm/kalamar/$(Split-Path -Leaf $ValuesFile)"
+Write-Host "  git commit -m `"Seal SQL Server SA password for $Namespace`""
