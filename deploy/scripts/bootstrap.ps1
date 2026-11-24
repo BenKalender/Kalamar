@@ -8,7 +8,7 @@
     2. k3d cluster'ını oluşturur (deploy/k3d/cluster.yaml) veya başlatır.
     3. Sealed Secrets anahtarının yedeği varsa cluster'a geri yükler.
     4. Argo CD'yi Helm ile kurar/günceller (deploy/argocd/argocd-values.yaml).
-    5. root Application'ı uygular; Argo CD gerisini (sealed-secrets, kalamar-dev) Git'ten kurar.
+    5. root Application'ı uygular; Argo CD gerisini (sealed-secrets, kalamar-dev, kalamar-prod) Git'ten kurar.
     6. Sealed Secrets anahtarını yedekler (yedek yoksa).
     7. Argo CD giriş bilgilerini ve adresleri yazdırır.
 
