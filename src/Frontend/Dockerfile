@@ -9,7 +9,7 @@ RUN dotnet publish "src/Frontend/Frontend.csproj" -c Release -o /app/publish --n
 FROM nginx:1.27-alpine AS runtime
 WORKDIR /usr/share/nginx/html
 EXPOSE 80
-# /api/ isteklerinin gideceği gateway adresi; Helm chart bunu kendi servis adıyla ezer.
-ENV API_UPSTREAM=http://gateway-service:8080
+# /api/ isteklerinin gideceği gateway adresi API_UPSTREAM env'i ile verilmelidir
+# (Helm chart: http://<release>-gateway:8080). Verilmezse nginx açılmaz.
 COPY --from=build /app/publish/wwwroot .
 COPY src/Frontend/nginx/default.conf.template /etc/nginx/templates/default.conf.template

@@ -1,19 +1,5 @@
-const string FrontendCorsPolicy = "FrontendCors";
-
+// Tarayıcı istekleri ingress → frontend nginx → gateway yoluyla aynı origin'den geldiği için CORS gerekmez.
 var builder = WebApplication.CreateBuilder(args);
-
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(FrontendCorsPolicy, policy =>
-    {
-        policy
-            .WithOrigins(allowedOrigins)
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
 
 builder.Services.AddHealthChecks();
 
@@ -23,7 +9,6 @@ builder.Services
 
 var app = builder.Build();
 
-app.UseCors(FrontendCorsPolicy);
 app.MapHealthChecks("/healthz/live");
 app.MapHealthChecks("/healthz/ready");
 app.MapReverseProxy();

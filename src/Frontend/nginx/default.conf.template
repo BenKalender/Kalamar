@@ -1,8 +1,7 @@
 # nginx resmi image'ı, /etc/nginx/templates/*.template dosyalarındaki ${VAR} ifadelerini
 # açılışta ortam değişkenleriyle doldurur (envsubst). Yalnızca tanımlı değişkenler değiştirilir,
 # bu yüzden $host gibi nginx değişkenleri olduğu gibi kalır.
-#   docker compose : API_UPSTREAM=http://gateway-service:8080 (Dockerfile varsayılanı)
-#   Helm           : API_UPSTREAM=http://<release>-gateway:8080
+#   Helm: API_UPSTREAM=http://<release>-gateway:8080 (values.yaml → apps.frontend.env)
 server {
     listen 80;
     server_name _;
