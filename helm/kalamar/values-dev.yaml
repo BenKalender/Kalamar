@@ -2,7 +2,7 @@
 # image.tag'i CI (Faz 4) her main build'inde git SHA'sıyla günceller; elle değiştirmeyin.
 
 image:
-  tag: "a90ebbc"
+  tag: "d58d7f4"
 ingress:
   host: kalamar.localhost
 sqlserver:
